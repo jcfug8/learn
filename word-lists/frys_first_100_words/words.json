@@ -1,0 +1,46 @@
+{
+  "name": "Fry's First 100 Words",
+  "subLists": [
+    {
+      "name": "List 1A",
+      "words": ["the", "of", "and", "a", "to", "in", "is", "you", "that", "it"]
+    },
+    {
+      "name": "List 1B",
+      "words": ["he", "was", "for", "on", "are", "as", "with", "his", "they", "I"]
+    },
+    {
+      "name": "List 1C",
+      "words": ["at", "be", "this", "have", "from", "or", "one", "had", "by", "words"]
+    },
+    {
+      "name": "List 1D",
+      "words": ["but", "not", "what", "all", "were", "we", "when", "your", "can", "said"]
+    },
+    {
+      "name": "List 1E",
+      "words": ["there", "use", "an", "each", "which", "she", "do", "how", "their", "if"]
+    },
+    {
+      "name": "List 1F",
+      "words": ["will", "up", "other", "about", "out", "many", "then", "them", "these", "so"]
+    },
+    {
+      "name": "List 1G",
+      "words": ["some", "her", "would", "make", "like", "him", "into", "time", "has", "look"]
+    },
+    {
+      "name": "List 1H",
+      "words": ["two", "more", "write", "go", "see", "number", "no", "way", "could", "people"]
+    },
+    {
+      "name": "List 1I",
+      "words": ["my", "than", "first", "water", "been", "called", "who", "am", "its", "now"]
+    },
+    {
+      "name": "List 1J",
+      "words": ["find", "long", "down", "day", "did", "get", "come", "made", "may", "part"]
+    }
+  ]
+}
+
