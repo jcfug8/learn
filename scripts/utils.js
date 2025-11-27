@@ -105,22 +105,48 @@ async function generateProblems(problemSet, wordSets = null, letterSets = null) 
     else if (problemSet.type === 'words' && items.length > 0) {
         items = await normalizeWordItems(items, wordSets);
     }
+    // For numbers type, normalize items (expand ranges to actual numbers)
+    else if (problemSet.type === 'numbers' && items.length > 0) {
+        items = await normalizeNumberItems(items);
+    }
     
     if (items.length === 0) {
         return problems;
     }
     
-    // Limit problem count to available items or max
-    const count = Math.min(problemSet.problemCount || 20, MAX_PROBLEM_COUNT);
+    // Remove duplicates from items (case-insensitive for words)
+    const uniqueItems = [];
+    const seenAnswers = new Set();
     
-    // Generate problems by cycling through items
-    for (let i = 0; i < count; i++) {
-        const itemIndex = i % items.length;
-        const answer = items[itemIndex];
+    for (const item of items) {
+        const key = problemSet.type === 'words' ? item.toLowerCase() : item;
+        if (!seenAnswers.has(key)) {
+            seenAnswers.add(key);
+            uniqueItems.push(item);
+        }
+    }
+    
+    // Limit problem count to available unique items or max
+    const count = Math.min(problemSet.problemCount || 20, uniqueItems.length, MAX_PROBLEM_COUNT);
+    
+    // Shuffle unique items to randomize selection
+    const shuffledItems = [...uniqueItems].sort(() => Math.random() - 0.5);
+    
+    // Generate problems from shuffled unique items
+    const usedAnswers = new Set();
+    for (let i = 0; i < count && i < shuffledItems.length; i++) {
+        const answer = shuffledItems[i];
+        const answerKey = problemSet.type === 'words' ? answer.toLowerCase() : answer;
+        
+        // Skip if we've already used this answer (shouldn't happen, but safety check)
+        if (usedAnswers.has(answerKey)) {
+            continue;
+        }
+        usedAnswers.add(answerKey);
         
         const problem = {
             answer: answer,
-            wrongAnswers: generateWrongAnswers(answer, items, problemSet.type),
+            wrongAnswers: generateWrongAnswers(answer, uniqueItems, problemSet.type),
             type: problemSet.type,
             problemSet: problemSet
         };
@@ -456,5 +482,65 @@ export async function normalizeWordItemsFromQueryParams(urlParams, wordSets = nu
     }
     
     return Array.from(words);
+}
+
+/**
+ * Normalizes number items array, expanding ranges to actual numbers.
+ * Items can be:
+ * - Individual numbers as strings (e.g., "5", "42")
+ * - Range objects with min/max (e.g., {min: 0, max: 9})
+ * 
+ * @param {Array} items - Array of items that may contain numbers or range objects
+ * @returns {Promise<Array<string>>} - Normalized array of numbers as strings (all ranges expanded)
+ */
+export async function normalizeNumberItems(items) {
+    if (!items || !Array.isArray(items) || items.length === 0) {
+        console.log('normalizeNumberItems: items is empty or invalid');
+        return [];
+    }
+    
+    console.log('normalizeNumberItems: processing items:', items);
+    const numbers = new Set();
+    
+    // Helper function to generate numbers from a range
+    const generateNumbersFromRange = (min, max) => {
+        const nums = [];
+        for (let i = min; i <= max; i++) {
+            nums.push(String(i));
+        }
+        return nums;
+    };
+    
+    // Process each item
+    for (const item of items) {
+        if (!item) {
+            console.log('normalizeNumberItems: skipping null/undefined item');
+            continue;
+        }
+        
+        // Check if it's a range object
+        if (typeof item === 'object' && item.min !== undefined && item.max !== undefined) {
+            const min = Number(item.min);
+            const max = Number(item.max);
+            if (!isNaN(min) && !isNaN(max) && min <= max) {
+                console.log(`normalizeNumberItems: found range ${min}-${max}`);
+                const nums = generateNumbersFromRange(min, max);
+                nums.forEach(num => numbers.add(num));
+            } else {
+                console.warn(`normalizeNumberItems: invalid range: ${item.min}-${item.max}`);
+            }
+        } else if (typeof item === 'string') {
+            // It's an individual number string
+            const trimmed = item.trim();
+            if (trimmed) {
+                console.log(`normalizeNumberItems: treating "${trimmed}" as individual number`);
+                numbers.add(trimmed);
+            }
+        } else {
+            console.warn('normalizeNumberItems: skipping invalid item type:', typeof item, item);
+        }
+    }
+    
+    return Array.from(numbers);
 }
 

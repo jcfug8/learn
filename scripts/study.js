@@ -564,7 +564,7 @@ const Study = {
           if (set.type === 'letters') {
             set.items = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
           } else if (set.type === 'numbers') {
-            set.items = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+            set.items = [{min: 0, max: 9}];
           } else if (set.type === 'words') {
             set.items = []; // Start with empty, user selects from word lists
           }

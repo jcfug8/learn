@@ -13,14 +13,38 @@ import librosa
 import soundfile as sf
 
 def load_word_list(word_list_path=None):
-    """Load words from word list JSON files or return None to use order from audio."""
+    """Load words/letters from word list or letter list JSON files or return None to use order from audio."""
     if not word_list_path:
         return None
     
-    words = []
+    items = []
     
+    # Check if it's a letter-lists directory
+    elif os.path.isdir(word_list_path) and 'letter-lists' in word_list_path:
+        # Load all letter lists
+        index_path = os.path.join(word_list_path, 'index.json')
+        if os.path.exists(index_path):
+            with open(index_path, 'r') as f:
+                index = json.load(f)
+            
+            for letter_list_id in index.get('letterLists', []):
+                letters_json_path = os.path.join(word_list_path, letter_list_id, 'letters.json')
+                if os.path.exists(letters_json_path):
+                    with open(letters_json_path, 'r') as f:
+                        letter_list_data = json.load(f)
+                    
+                    # Extract letters from letters array
+                    items.extend(letter_list_data.get('letters', []))
+        else:
+            # Single letter list directory
+            letters_json_path = os.path.join(word_list_path, 'letters.json')
+            if os.path.exists(letters_json_path):
+                with open(letters_json_path, 'r') as f:
+                    letter_list_data = json.load(f)
+                
+                items.extend(letter_list_data.get('letters', []))
     # Try to load from word-lists directory
-    if os.path.isdir(word_list_path):
+    elif os.path.isdir(word_list_path):
         # Load all word lists
         index_path = os.path.join(word_list_path, 'index.json')
         if os.path.exists(index_path):
@@ -35,7 +59,7 @@ def load_word_list(word_list_path=None):
                     
                     # Extract words from sub-lists
                     for sub_list in word_list_data.get('subLists', []):
-                        words.extend(sub_list.get('words', []))
+                        items.extend(sub_list.get('words', []))
         else:
             # Single word list directory
             words_json_path = os.path.join(word_list_path, 'words.json')
@@ -44,24 +68,34 @@ def load_word_list(word_list_path=None):
                     word_list_data = json.load(f)
                 
                 for sub_list in word_list_data.get('subLists', []):
-                    words.extend(sub_list.get('words', []))
+                    items.extend(sub_list.get('words', []))
     elif os.path.isfile(word_list_path):
-        # Single JSON file
+        # Single JSON file - check if it's a letter list or word list
         with open(word_list_path, 'r') as f:
-            word_list_data = json.load(f)
+            data = json.load(f)
         
-        for sub_list in word_list_data.get('subLists', []):
-            words.extend(sub_list.get('words', []))
+        # Check if it has a 'letters' array (letter list)
+        if 'letters' in data:
+            items.extend(data.get('letters', []))
+        # Otherwise assume it's a word list with subLists
+        else:
+            for sub_list in data.get('subLists', []):
+                items.extend(sub_list.get('words', []))
     
     # Remove duplicates while preserving order
+    # For letters, preserve case (A vs a are different)
+    # For words, use case-insensitive comparison
     seen = set()
-    unique_words = []
-    for word in words:
-        if word.lower() not in seen:
-            seen.add(word.lower())
-            unique_words.append(word)
+    unique_items = []
+    for item in items:
+        # Check if it's a single letter (case-sensitive) or a word (case-insensitive)
+        is_letter = len(item) == 1 and item.isalpha()
+        key = item if is_letter else item.lower()
+        if key not in seen:
+            seen.add(key)
+            unique_items.append(item)
     
-    return unique_words if unique_words else None
+    return unique_items if unique_items else None
 
 def detect_silence(y, sr, min_silence_len=500, silence_thresh=-40):
     """
@@ -325,10 +359,10 @@ def split_audio_file(input_file, output_dir, word_list=None, min_silence_len=500
             continue
         
         if word_list and saved_count < len(word_list):
-            # Use word from list as filename
-            word = word_list[saved_count]
+            # Use word/letter from list as filename
+            item = word_list[saved_count]
             # Sanitize filename (remove special characters)
-            safe_word = "".join(c for c in word if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_word = "".join(c for c in item if c.isalnum() or c in (' ', '-', '_')).strip()
             safe_word = safe_word.replace(' ', '_')
             filename = f"{safe_word}{ext}"
         else:
@@ -373,7 +407,7 @@ def main():
     parser.add_argument('--analyze', '-a', action='store_true',
                        help='Analyze silence blocks instead of splitting (no output_dir needed)')
     parser.add_argument('--word-list', '-w', 
-                       help='Path to word list JSON file or word-lists directory (optional)')
+                       help='Path to word/letter list JSON file, word-lists directory, or letter-lists directory (optional)')
     parser.add_argument('--min-silence-len', type=int, default=500,
                        help='Minimum silence length in milliseconds (default: 500)')
     parser.add_argument('--silence-thresh', type=int, default=-40,
@@ -397,15 +431,15 @@ def main():
     if not args.output_dir:
         parser.error("output_dir is required unless --analyze is used")
     
-    # Load word list if provided
+    # Load word/letter list if provided
     word_list = None
     if args.word_list:
-        print(f"Loading word list from: {args.word_list}")
+        print(f"Loading list from: {args.word_list}")
         word_list = load_word_list(args.word_list)
         if word_list:
-            print(f"Loaded {len(word_list)} words")
+            print(f"Loaded {len(word_list)} items")
         else:
-            print("Warning: Could not load word list, will use numbered filenames")
+            print("Warning: Could not load list, will use numbered filenames")
     
     # Split the audio file
     split_audio_file(

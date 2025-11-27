@@ -1,5 +1,5 @@
 export const Speak = {
-  props: ['text', 'autoPlay'],
+  props: ['text', 'autoPlay', 'type'],
   emits: ['speaking', 'done'],
   template: `
     <div class="speak-container">
@@ -163,7 +163,12 @@ export const Speak = {
       // Last resort: default voice
       return this.voices[0];
     },
-    getAudioFilePath(text, lowercase = true) {
+    isSingleLetter(text) {
+      // Check if text is a single letter (case-sensitive)
+      return text && text.length === 1 && /[a-zA-Z]/.test(text);
+    },
+    getWordAudioPath(text, lowercase = true) {
+      // For words, use word-lists directory
       // Sanitize text for filename (same logic as split_audio.py)
       // Keep only alphanumeric, spaces, hyphens, and underscores
       let processed = text;
@@ -177,6 +182,13 @@ export const Speak = {
         .trim()
         .replace(/\s+/g, '_'); // Replace spaces with underscores
       return `word-lists/audio/${safeWord}.mp3`;
+    },
+    getLetterAudioPath(text) {
+      // For letters, use letter-lists/audio with prefix
+      const isUppercase = text === text.toUpperCase() && text !== text.toLowerCase();
+      const prefix = isUppercase ? 'upper' : 'lower';
+      const letter = text.toUpperCase(); // Use uppercase for filename
+      return `letter-lists/audio/${prefix}_${letter}.mp3`;
     },
     async checkAudioFileExists(filePath) {
       try {
@@ -232,41 +244,79 @@ export const Speak = {
     async speak() {
       if (!this.text) return;
       
-      // Cancel any ongoing speech or audio
+      // Prevent multiple simultaneous calls
+      if (this.isSpeaking) {
+        return;
+      }
+      
+      // Cancel any ongoing speech or audio first
       window.speechSynthesis.cancel();
       if (this.audioElement) {
         this.audioElement.pause();
         this.audioElement = null;
       }
       
-      // Check if audio file exists (try both lowercase and original case)
-      let audioPath = this.getAudioFilePath(this.text, true); // lowercase first
-      let audioExists = await this.checkAudioFileExists(audioPath);
+      // Set speaking state early to prevent concurrent calls
+      this.isSpeaking = true;
+      this.$emit('speaking', true);
       
-      // If lowercase doesn't exist, try original case (for words like "I")
-      if (!audioExists) {
-        audioPath = this.getAudioFilePath(this.text, false);
-        audioExists = await this.checkAudioFileExists(audioPath);
-      }
-      
-      if (audioExists) {
-        // Play audio file
-        this.isSpeaking = true;
-        this.$emit('speaking', true);
+      try {
+        // Check if audio file exists
+        let audioPath;
+        let audioExists = false;
         
-        try {
-          await this.playAudioFile(audioPath);
-        } catch (error) {
-          // If audio playback fails, fall back to speech synthesis
-          console.log('Audio playback failed, falling back to speech synthesis');
+        // Use type prop to determine where to look
+        if (this.type === 'letters') {
+          // For letters, use letter-lists with prefix
+          audioPath = this.getLetterAudioPath(this.text);
+          audioExists = await this.checkAudioFileExists(audioPath);
+        } else {
+          // For words (or if type not specified), use word-lists
+          // Try lowercase first, then original case (for words like "I")
+          audioPath = this.getWordAudioPath(this.text, true); // lowercase first
+          audioExists = await this.checkAudioFileExists(audioPath);
+          
+          // If lowercase doesn't exist, try original case
+          if (!audioExists) {
+            audioPath = this.getWordAudioPath(this.text, false);
+            audioExists = await this.checkAudioFileExists(audioPath);
+          }
+        }
+        
+        if (audioExists) {
+          // Play audio file - this will handle isSpeaking state
+          try {
+            await this.playAudioFile(audioPath);
+          } catch (error) {
+            // If audio playback fails, fall back to speech synthesis
+            console.log('Audio playback failed, falling back to speech synthesis');
+            // Reset state before calling synthesis
+            this.isSpeaking = false;
+            this.$emit('speaking', false);
+            this.speakWithSynthesis();
+          }
+        } else {
+          // No audio file found - only now use speech synthesis
+          // Reset state before calling synthesis (speakWithSynthesis will set it again)
+          this.isSpeaking = false;
+          this.$emit('speaking', false);
           this.speakWithSynthesis();
         }
-      } else {
-        // No audio file, use speech synthesis
+      } catch (error) {
+        // Handle any errors during file checking
+        console.error('Error checking for audio file:', error);
+        this.isSpeaking = false;
+        this.$emit('speaking', false);
+        // Fall back to speech synthesis
         this.speakWithSynthesis();
       }
     },
     speakWithSynthesis() {
+      // Only proceed if we're not already speaking (prevent double calls)
+      if (this.isSpeaking && this.utterance) {
+        return;
+      }
+      
       // Reload voices if not loaded yet
       if (this.voices.length === 0) {
         this.loadVoices();

@@ -17,6 +17,7 @@ export const NumberProblem = {
         <Speak 
           :text="problem ? problem.answer : ''"
           :autoPlay="true"
+          type="numbers"
         />
         <input
           v-model="userAnswer"
@@ -40,6 +41,7 @@ export const NumberProblem = {
         <Speak 
           :text="problem ? problem.answer : ''"
           :autoPlay="true"
+          type="numbers"
         />
         <div class="multiple-choice-options">
           <button

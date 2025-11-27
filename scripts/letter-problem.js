@@ -17,6 +17,7 @@ export const LetterProblem = {
         <Speak 
           :text="problem ? problem.answer : ''"
           :autoPlay="true"
+          type="letters"
         />
         <input
           v-model="userAnswer"
@@ -41,6 +42,7 @@ export const LetterProblem = {
         <Speak 
           :text="problem ? problem.answer : ''"
           :autoPlay="true"
+          type="letters"
         />
         <div class="multiple-choice-options">
           <button

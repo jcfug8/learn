@@ -1,0 +1,3 @@
+example word file splitter
+
+python split_audio.py download.wav audio/words/ --min-silence-len 300 --word-list word-lists/dolch_sight_words/words.json --min-energy -35

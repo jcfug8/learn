@@ -124,26 +124,53 @@ export const StudyConfig = {
             </div>
           </div>
           
-          <!-- Number selector -->
+          <!-- Number selector with min/max ranges -->
           <div v-if="set.type === 'numbers'" class="item-selector">
-            <h5 style="margin: 15px 0 10px 0; color: #666; font-size: 0.9rem;">Select Numbers</h5>
-            <div class="item-grid">
-              <label 
-                v-for="number in allNumbers" 
-                :key="number"
-                class="item-checkbox"
+            <h5 style="margin: 15px 0 10px 0; color: #666; font-size: 0.9rem;">Number Ranges</h5>
+            <div v-if="set.items && set.items.length > 0" style="margin-bottom: 15px;">
+              <template 
+                v-for="(item, index) in set.items" 
+                :key="index"
               >
-                <input 
-                  type="checkbox" 
-                  :value="number"
-                  v-model="set.items"
-                />
-                <span>{{ number }}</span>
-              </label>
+                <div 
+                  v-if="typeof item === 'object' && item.min !== undefined && item.max !== undefined"
+                  style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 5px;"
+                >
+                <label style="display: flex; align-items: center; gap: 5px;">
+                  <span style="min-width: 40px;">Min:</span>
+                  <input 
+                    type="number" 
+                    v-model.number="item.min"
+                    style="width: 80px; padding: 5px;"
+                    min="0"
+                    @input="ensureMaxGreaterThanMin(item)"
+                  />
+                </label>
+                <label style="display: flex; align-items: center; gap: 5px;">
+                  <span style="min-width: 40px;">Max:</span>
+                  <input 
+                    type="number" 
+                    v-model.number="item.max"
+                    style="width: 80px; padding: 5px;"
+                    :min="item.min || 0"
+                    @input="ensureMaxGreaterThanMin(item)"
+                  />
+                </label>
+                <span :style="{color: item.max >= item.min ? '#666' : '#dc3545', fontSize: '0.9rem'}">
+                  ({{ item.max >= item.min ? item.max - item.min + 1 : 0 }} numbers)
+                </span>
+                <button 
+                  @click="removeNumberRange(set, index)"
+                  class="small-button"
+                  style="margin-left: auto; background: #dc3545;"
+                >
+                  Remove
+                </button>
+                </div>
+              </template>
             </div>
             <div style="margin-top: 10px;">
-              <button @click="selectAllNumbers(set)" class="small-button">Select All</button>
-              <button @click="deselectAllNumbers(set)" class="small-button">Deselect All</button>
+              <button @click="addNumberRange(set)" class="small-button" style="background: #42b983;">Add Range</button>
             </div>
           </div>
           
@@ -251,10 +278,22 @@ export const StudyConfig = {
     if (problemSetsJson) {
       try {
         problemSets = JSON.parse(problemSetsJson);
+        console.log('study-config.js: Parsed problemSets from query params:', JSON.stringify(problemSets, null, 2));
         // Ensure each problem set has problemCount
-        problemSets.forEach(set => {
+        problemSets.forEach((set, index) => {
+          console.log(`study-config.js: Problem set ${index} after parse:`, JSON.stringify(set, null, 2));
           if (set.problemCount === undefined) {
             set.problemCount = 20;
+          }
+          // Log number items specifically
+          if (set.type === 'numbers' && set.items) {
+            console.log(`study-config.js: Number set ${index} items:`, JSON.stringify(set.items, null, 2));
+            console.log(`study-config.js: Number set ${index} items type check:`, set.items.map(item => ({
+              item,
+              isObject: typeof item === 'object',
+              hasMin: item && item.min !== undefined,
+              hasMax: item && item.max !== undefined
+            })));
           }
         });
       } catch (error) {
@@ -273,7 +312,6 @@ export const StudyConfig = {
         { icon: '📝', value: 'words' }
       ],
       allLetters: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'],
-      allNumbers: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
       wordSets: [],
       letterSets: [],
       voices: [],
@@ -288,17 +326,32 @@ export const StudyConfig = {
   },
   async mounted() {
     console.log('study-config.js: mounted, session:', this.session);
+    console.log('study-config.js: problemSets from query params:', JSON.stringify(this.session.problemSets, null, 2));
     
     // Initialize default items for problem sets that don't have them
-    this.session.problemSets.forEach(set => {
-      if (!set.items) {
+    this.session.problemSets.forEach((set, index) => {
+      console.log(`study-config.js: Processing problem set ${index}:`, set);
+      console.log(`study-config.js: Set type: ${set.type}, items before init:`, set.items);
+      
+      if (!set.items || (Array.isArray(set.items) && set.items.length === 0)) {
+        console.log(`study-config.js: Initializing default items for ${set.type}`);
         if (set.type === 'letters') {
           set.items = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
         } else if (set.type === 'numbers') {
-          set.items = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+          set.items = [{min: 0, max: 9}];
         } else if (set.type === 'words') {
           set.items = []; // Start with empty, user selects from word lists
         }
+      } else {
+        console.log(`study-config.js: Items already exist for ${set.type}:`, set.items);
+      }
+      
+      // Clean up number items to ensure only ranges are stored
+      if (set.type === 'numbers' && set.items) {
+        console.log(`study-config.js: Cleaning number items, before:`, JSON.stringify(set.items));
+        const cleaned = this.cleanNumberItems(set.items);
+        console.log(`study-config.js: Cleaning number items, after:`, JSON.stringify(cleaned));
+        set.items = cleaned;
       }
     });
     
@@ -316,7 +369,8 @@ export const StudyConfig = {
     // Allow query param updates now that initialization is complete
     this.isInitializing = false;
   },
-  setupQueryParamWatchers() {
+  methods: {
+    setupQueryParamWatchers() {
     // Watch for changes to displayFormat
     this.$watch('session.displayFormat', () => {
       this.updateQueryParams();
@@ -349,7 +403,6 @@ export const StudyConfig = {
     
     console.log('study-config.js: Updated query params:', newUrl);
   },
-  methods: {
     async loadWordLists() {
       try {
         console.log('study-config.js: Loading word lists...');
@@ -593,7 +646,7 @@ export const StudyConfig = {
       if (type === 'letters') {
         newSet.items = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
       } else if (type === 'numbers') {
-        newSet.items = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        newSet.items = [{min: 0, max: 9}];
       } else if (type === 'words') {
         newSet.items = []; // Start with empty, user selects from word lists
       }
@@ -636,11 +689,61 @@ export const StudyConfig = {
     deselectAllLetters(set) {
       set.items = [];
     },
-    selectAllNumbers(set) {
-      set.items = [...this.allNumbers];
+    cleanNumberItems(items) {
+      if (!items || !Array.isArray(items)) {
+        console.log('cleanNumberItems: items is not an array or is empty');
+        return [];
+      }
+      console.log('cleanNumberItems: input items:', JSON.stringify(items));
+      
+      // Filter to only range objects, convert individual numbers to ranges
+      const cleaned = items.map(item => {
+        // Check if it's already a valid range object
+        if (item && typeof item === 'object' && item.min !== undefined && item.max !== undefined) {
+          console.log('cleanNumberItems: found range object:', item);
+          return item;
+        } else if (typeof item === 'string' && item.trim()) {
+          // Convert individual number string to a range
+          const num = parseInt(item.trim());
+          if (!isNaN(num)) {
+            console.log('cleanNumberItems: converting string to range:', item, '->', {min: num, max: num});
+            return {min: num, max: num};
+          }
+        }
+        console.log('cleanNumberItems: skipping invalid item:', item);
+        return null;
+      }).filter(item => item !== null);
+      
+      console.log('cleanNumberItems: output:', JSON.stringify(cleaned));
+      return cleaned;
     },
-    deselectAllNumbers(set) {
-      set.items = [];
+    addNumberRange(set) {
+      if (!set.items) {
+        set.items = [];
+      }
+      // Filter out any non-range items first
+      set.items = this.cleanNumberItems(set.items);
+      // Get the last range or use default
+      const lastRange = set.items.length > 0
+        ? set.items[set.items.length - 1]
+        : {min: 0, max: 9};
+      set.items.push({min: lastRange.min, max: lastRange.max});
+    },
+    removeNumberRange(set, index) {
+      if (!set.items) {
+        return;
+      }
+      // Filter to only range objects
+      const ranges = this.cleanNumberItems(set.items);
+      if (ranges.length > index) {
+        ranges.splice(index, 1);
+        set.items = ranges;
+      }
+    },
+    ensureMaxGreaterThanMin(range) {
+      if (range.min !== undefined && range.max !== undefined && range.max < range.min) {
+        range.max = range.min;
+      }
     },
     selectAllWords(set) {
       // Get all words from all word sets
