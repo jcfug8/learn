@@ -1,3 +1,5 @@
+import { breakDownNumber } from './utils.js';
+
 export const Speak = {
   props: ['text', 'autoPlay', 'type'],
   emits: ['speaking', 'done'],
@@ -190,6 +192,10 @@ export const Speak = {
       const letter = text.toUpperCase(); // Use uppercase for filename
       return `letter-lists/audio/${prefix}_${letter}.mp3`;
     },
+    getNumberAudioPath(num) {
+      // For numbers, use number-lists/audio
+      return `number-lists/audio/${num}.mp3`;
+    },
     async checkAudioFileExists(filePath) {
       try {
         const response = await fetch(filePath, { method: 'HEAD' });
@@ -198,7 +204,7 @@ export const Speak = {
         return false;
       }
     },
-    async playAudioFile(filePath) {
+    async playAudioFile(filePath, manageState = true) {
       return new Promise((resolve, reject) => {
         // Stop any existing audio
         if (this.audioElement) {
@@ -206,36 +212,53 @@ export const Speak = {
           this.audioElement = null;
         }
         
-        this.audioElement = new Audio(filePath);
+        const audio = new Audio(filePath);
+        this.audioElement = audio;
         
-        this.audioElement.onended = () => {
-          this.isSpeaking = false;
-          this.$emit('speaking', false);
-          this.$emit('done');
-          this.audioElement = null;
+        audio.onended = () => {
+          if (manageState) {
+            this.isSpeaking = false;
+            this.$emit('speaking', false);
+            this.$emit('done');
+          }
+          if (this.audioElement === audio) {
+            this.audioElement = null;
+          }
           resolve();
         };
         
-        this.audioElement.onerror = (error) => {
+        audio.onerror = (error) => {
           console.error('Audio playback error:', error);
-          this.isSpeaking = false;
-          this.$emit('speaking', false);
-          this.audioElement = null;
+          if (manageState) {
+            this.isSpeaking = false;
+            this.$emit('speaking', false);
+          }
+          if (this.audioElement === audio) {
+            this.audioElement = null;
+          }
           reject(error);
         };
         
-        this.audioElement.play().catch(error => {
+        audio.play().catch(error => {
           // Handle autoplay restrictions
           if (error.name === 'NotAllowedError') {
-            this.isSpeaking = false;
-            this.$emit('speaking', false);
-            this.audioElement = null;
+            if (manageState) {
+              this.isSpeaking = false;
+              this.$emit('speaking', false);
+            }
+            if (this.audioElement === audio) {
+              this.audioElement = null;
+            }
             reject(error);
           } else {
             console.error('Audio play error:', error);
-            this.isSpeaking = false;
-            this.$emit('speaking', false);
-            this.audioElement = null;
+            if (manageState) {
+              this.isSpeaking = false;
+              this.$emit('speaking', false);
+            }
+            if (this.audioElement === audio) {
+              this.audioElement = null;
+            }
             reject(error);
           }
         });
@@ -261,6 +284,16 @@ export const Speak = {
       this.$emit('speaking', true);
       
       try {
+        // Handle numbers specially - break them down and play each component
+        if (this.type === 'numbers') {
+          const num = typeof this.text === 'string' ? parseInt(this.text, 10) : this.text;
+          if (!isNaN(num)) {
+            const components = breakDownNumber(num);
+            await this.playNumberComponents(components);
+            return;
+          }
+        }
+        
         // Check if audio file exists
         let audioPath;
         let audioExists = false;
@@ -310,6 +343,59 @@ export const Speak = {
         // Fall back to speech synthesis
         this.speakWithSynthesis();
       }
+    },
+    async playNumberComponents(components) {
+      // Play each number component sequentially
+      for (let i = 0; i < components.length; i++) {
+        const component = components[i];
+        const audioPath = this.getNumberAudioPath(component);
+        const audioExists = await this.checkAudioFileExists(audioPath);
+        
+        if (audioExists) {
+          try {
+            // Play audio without managing state (we'll manage it at the end)
+            await this.playAudioFile(audioPath, false);
+          } catch (error) {
+            console.error(`Error playing audio for component ${component}:`, error);
+            // If one component fails, fall back to speech synthesis for this component
+            await this.speakNumberComponent(component);
+          }
+        } else {
+          console.warn(`Audio file not found for number component: ${component}`);
+          // If audio file doesn't exist, fall back to speech synthesis for this component
+          await this.speakNumberComponent(component);
+        }
+      }
+      
+      // All components played
+      this.isSpeaking = false;
+      this.$emit('speaking', false);
+      this.$emit('done');
+    },
+    async speakNumberComponent(component) {
+      // Ensure voices are loaded
+      if (this.voices.length === 0) {
+        this.loadVoices();
+      }
+      
+      // Ensure we have a voice selected
+      if (!this.selectedVoice) {
+        this.selectedVoice = this.selectBestVoice();
+      }
+      
+      // Create utterance for this component
+      const utterance = new SpeechSynthesisUtterance(String(component));
+      utterance.lang = 'en-US';
+      utterance.rate = 0.6;
+      if (this.selectedVoice) {
+        utterance.voice = this.selectedVoice;
+      }
+      
+      return new Promise((resolve) => {
+        utterance.onend = resolve;
+        utterance.onerror = resolve;
+        window.speechSynthesis.speak(utterance);
+      });
     },
     speakWithSynthesis() {
       // Only proceed if we're not already speaking (prevent double calls)

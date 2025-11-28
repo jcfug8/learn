@@ -544,3 +544,76 @@ export async function normalizeNumberItems(items) {
     return Array.from(numbers);
 }
 
+/**
+ * Breaks down a number into its spoken components.
+ * Returns an array of numbers that need to be spoken in order.
+ * 
+ * Examples:
+ * - 12 -> [12]
+ * - 1 -> [1]
+ * - 100 -> [1, 100]
+ * - 200 -> [2, 100]
+ * - 2025 -> [2, 1000, 20, 5]
+ * - 46256 -> [40, 6, 1000, 2, 100, 50, 6]
+ * 
+ * @param {number|string} num - The number to break down
+ * @returns {number[]} - Array of numbers representing the spoken components
+ */
+export function breakDownNumber(num) {
+    // Convert to number if string
+    const n = typeof num === 'string' ? parseInt(num, 10) : num;
+    
+    // Handle invalid numbers
+    if (isNaN(n) || n < 0) {
+        return [];
+    }
+    
+    // Numbers less than 20 are spoken as-is
+    if (n < 20) {
+        return [n];
+    }
+    
+    // Numbers from 20 to 99: break into tens and ones
+    if (n < 100) {
+        const tens = Math.floor(n / 10) * 10;
+        const ones = n % 10;
+        if (ones === 0) {
+            return [tens];
+        }
+        return [tens, ones];
+    }
+    
+    const components = [];
+    let remaining = n;
+    
+    // Define powers of 10 in descending order
+    const powers = [
+        { value: 1000000000000, name: 1000000000000 }, // trillion
+        { value: 1000000000, name: 1000000000 },     // billion
+        { value: 1000000, name: 1000000 },            // million
+        { value: 1000, name: 1000 },                  // thousand
+        { value: 100, name: 100 }                     // hundred
+    ];
+    
+    // Process each power of 10
+    for (const power of powers) {
+        if (remaining >= power.value) {
+            const count = Math.floor(remaining / power.value);
+            remaining = remaining % power.value;
+            
+            // Break down the count (recursively)
+            const countComponents = breakDownNumber(count);
+            components.push(...countComponents);
+            components.push(power.name);
+        }
+    }
+    
+    // Add remaining part (tens and ones)
+    if (remaining > 0) {
+        const remainingComponents = breakDownNumber(remaining);
+        components.push(...remainingComponents);
+    }
+    
+    return components;
+}
+

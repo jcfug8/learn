@@ -20,7 +20,7 @@ def load_word_list(word_list_path=None):
     items = []
     
     # Check if it's a letter-lists directory
-    elif os.path.isdir(word_list_path) and 'letter-lists' in word_list_path:
+    if os.path.isdir(word_list_path) and 'letter-lists' in word_list_path:
         # Load all letter lists
         index_path = os.path.join(word_list_path, 'index.json')
         if os.path.exists(index_path):
